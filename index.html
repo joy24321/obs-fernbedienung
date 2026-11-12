@@ -1,0 +1,671 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0d0f16">
+<title>OBS Fernbedienung</title>
+<script src="https://cdn.jsdelivr.net/npm/obs-websocket-js@5/dist/obs-ws.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+<style>
+  :root {
+    --bg: #0d0f16; --panel: #161a24; --card: #1d2230; --card2: #242a3a;
+    --text: #f1f3f9; --muted: #8b92a8; --line: rgba(255,255,255,.07);
+    --accent: #6c7cff; --accent2: #9b6cff; --green: #2fd18b; --red: #ff4d5e; --amber: #ffb547;
+    --radius: 18px;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; }
+  body {
+    min-height: 100vh; color: var(--text);
+    font-family: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+    background:
+      radial-gradient(900px 500px at 0% -10%, rgba(108,124,255,.18), transparent 60%),
+      radial-gradient(700px 400px at 100% 0%, rgba(155,108,255,.12), transparent 60%),
+      var(--bg);
+    background-attachment: fixed;
+  }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 18px 16px 130px; }
+  .hidden { display: none !important; }
+
+  /* ---------- Kopf ---------- */
+  header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .brand { display: flex; align-items: center; gap: 12px; }
+  .logo { width: 42px; height: 42px; border-radius: 13px; display: grid; place-items: center; font-size: 1.3rem;
+    background: linear-gradient(135deg, var(--accent), var(--accent2)); box-shadow: 0 6px 20px rgba(108,124,255,.35); }
+  h1 { margin: 0; font-size: 1.2rem; letter-spacing: -.01em; }
+  .pill { display: inline-flex; align-items: center; gap: 7px; margin-top: 3px; font-size: .8rem; color: var(--muted); }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+  .pill.ok .dot { background: var(--green); box-shadow: 0 0 8px var(--green); }
+  .pill.ok { color: var(--green); }
+  .pill.err .dot { background: var(--red); } .pill.err { color: var(--red); }
+  .ghost { background: var(--card); border: 1px solid var(--line); color: var(--muted); border-radius: 12px;
+    padding: 9px 13px; font: inherit; font-size: .85rem; cursor: pointer; }
+
+  /* ---------- Anmelden ---------- */
+  .login { max-width: 420px; margin: 36px auto 0; background: var(--panel); border: 1px solid var(--line);
+    border-radius: 24px; padding: 26px 20px; box-shadow: 0 20px 60px rgba(0,0,0,.35); }
+  .login h2 { margin: 0 0 6px; font-size: 1.35rem; }
+  .login p { margin: 0 0 20px; color: var(--muted); font-size: .92rem; line-height: 1.5; }
+  .stack { display: flex; flex-direction: column; gap: 10px; }
+  .big { width: 100%; border: none; border-radius: 16px; padding: 17px; font: inherit; font-size: 1.02rem; font-weight: 700;
+    cursor: pointer; color: #fff; background: linear-gradient(135deg, var(--accent), var(--accent2));
+    box-shadow: 0 8px 24px rgba(108,124,255,.3); }
+  .big.alt { background: var(--card); color: var(--text); border: 1px solid var(--line); box-shadow: none; font-weight: 600; }
+  .big:active { transform: scale(.98); }
+  video { width: 100%; border-radius: 16px; background: #000; display: none; }
+  .err-box { display: none; background: rgba(255,77,94,.1); border: 1px solid rgba(255,77,94,.3); color: #ffb3bb;
+    border-radius: 12px; padding: 11px 13px; font-size: .88rem; line-height: 1.45; }
+  .err-box.show { display: block; }
+  details { margin-top: 6px; border-top: 1px solid var(--line); padding-top: 14px; }
+  summary { cursor: pointer; color: var(--muted); font-size: .9rem; list-style: none; }
+  summary::before { content: "▸ "; } details[open] summary::before { content: "▾ "; }
+  label { display: block; font-size: .8rem; color: var(--muted); margin: 12px 0 5px; }
+  input:not([type=checkbox]) { width: 100%; background: var(--bg); border: 1px solid var(--line); color: var(--text);
+    border-radius: 12px; padding: 12px; font: inherit; outline: none; }
+  input:focus { border-color: var(--accent); }
+  .check { display: flex; align-items: center; gap: 8px; margin-top: 12px; font-size: .85rem; color: var(--muted); }
+  .hint { margin-top: 16px; font-size: .82rem; color: var(--muted); line-height: 1.5; }
+
+  /* ---------- Bereiche ---------- */
+  .section { margin-top: 22px; }
+  .sec-head { display: flex; align-items: baseline; justify-content: space-between; margin: 0 4px 10px; }
+  .sec-head h3 { margin: 0; font-size: .78rem; text-transform: uppercase; letter-spacing: .12em; color: var(--muted); font-weight: 600; }
+  .sec-head span { font-size: .8rem; color: var(--muted); }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+  .empty { color: var(--muted); font-size: .9rem; padding: 6px 4px; }
+
+  /* Stream / Aufnahme */
+  .outputs { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 20px; }
+  .out { display: flex; align-items: center; gap: 12px; border: 1px solid var(--line); background: var(--card);
+    color: var(--text); border-radius: var(--radius); padding: 16px; font: inherit; cursor: pointer; text-align: left; }
+  .out .ico { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; background: var(--card2); font-size: 1.1rem; flex: none; }
+  .out b { display: block; font-size: 1rem; }
+  .out small { color: var(--muted); font-size: .8rem; }
+  .out.on.live { background: linear-gradient(135deg, #ff4d5e, #d6334a); border-color: transparent; box-shadow: 0 8px 26px rgba(255,77,94,.35); }
+  .out.on.rec  { background: linear-gradient(135deg, #ffb547, #f08c1e); border-color: transparent; color: #2a1600; box-shadow: 0 8px 26px rgba(255,181,71,.3); }
+  .out.on .ico { background: rgba(255,255,255,.2); animation: blink 1.4s infinite; }
+  .out.on small { color: inherit; opacity: .85; }
+  @keyframes blink { 50% { opacity: .55; } }
+
+  /* Szenen */
+  .scene { position: relative; border: 1px solid var(--line); background: var(--card); color: var(--text);
+    border-radius: var(--radius); padding: 16px 14px; min-height: 92px; font: inherit; font-weight: 650; text-align: left;
+    cursor: pointer; display: flex; flex-direction: column; justify-content: space-between; gap: 8px; word-break: break-word;
+    transition: transform .1s, background .2s, box-shadow .2s; }
+  .scene small { font-weight: 500; font-size: .75rem; color: var(--muted); }
+  .scene.on { background: linear-gradient(135deg, var(--accent), var(--accent2)); border-color: transparent;
+    box-shadow: 0 10px 28px rgba(108,124,255,.4); }
+  .scene.on small { color: #fff; opacity: .9; }
+  .scene.on::after { content: "LIVE"; position: absolute; top: 10px; right: 10px; font-size: .62rem; font-weight: 800;
+    letter-spacing: .08em; background: rgba(255,255,255,.22); padding: 3px 7px; border-radius: 6px; }
+  button:active { transform: scale(.97); }
+
+  /* Quellen & Audio mit Schalter */
+  .tog { display: flex; align-items: center; justify-content: space-between; gap: 10px; border: 1px solid var(--line);
+    background: var(--card); color: var(--text); border-radius: 16px; padding: 14px; font: inherit; text-align: left;
+    cursor: pointer; min-height: 64px; }
+  .tog .lbl { min-width: 0; }
+  .tog .lbl b { display: block; font-weight: 600; font-size: .93rem; word-break: break-word; }
+  .tog .lbl small { color: var(--muted); font-size: .75rem; }
+  .sw { flex: none; width: 44px; height: 26px; border-radius: 99px; background: var(--card2); position: relative; transition: background .2s; }
+  .sw::after { content: ""; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%;
+    background: #fff; transition: transform .2s; box-shadow: 0 2px 6px rgba(0,0,0,.3); }
+  .tog.on .sw { background: var(--green); } .tog.on .sw::after { transform: translateX(18px); }
+  .tog.audio.on .sw { background: var(--green); }
+  .tog.audio:not(.on) { border-color: rgba(255,77,94,.35); background: rgba(255,77,94,.07); }
+  .tog.audio:not(.on) .sw { background: var(--red); }
+
+  /* ---------- Sprache ---------- */
+  .voicebar { position: fixed; left: 0; right: 0; bottom: 0; padding: 12px 16px calc(14px + env(safe-area-inset-bottom));
+    background: linear-gradient(to top, var(--bg) 60%, transparent); }
+  .voice { max-width: 980px; margin: 0 auto; display: flex; align-items: center; gap: 12px;
+    background: rgba(29,34,48,.92); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+    border: 1px solid var(--line); border-radius: 22px; padding: 10px 10px 10px 16px; box-shadow: 0 10px 40px rgba(0,0,0,.45); }
+  .vtext { flex: 1; min-width: 0; }
+  .vtext .heard { font-size: .92rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .vtext .res { font-size: .78rem; color: var(--muted); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .vbtn { flex: none; background: none; border: none; color: var(--muted); font-size: 1.15rem; cursor: pointer; padding: 8px; }
+  .mic { flex: none; width: 56px; height: 56px; border-radius: 50%; border: none; font-size: 1.5rem; cursor: pointer; color: #fff;
+    background: linear-gradient(135deg, var(--accent), var(--accent2)); box-shadow: 0 6px 20px rgba(108,124,255,.45); }
+  .mic.listening { background: linear-gradient(135deg, #ff4d5e, #d6334a); animation: pulse 1.3s infinite; }
+  .mic:disabled { opacity: .35; }
+  @keyframes pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(255,77,94,.55); } 50% { box-shadow: 0 0 0 14px rgba(255,77,94,0); } }
+
+  .sheet { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: flex; align-items: flex-end; justify-content: center; z-index: 10; }
+  .sheet-in { width: 100%; max-width: 520px; background: var(--panel); border-radius: 24px 24px 0 0; padding: 22px 20px calc(24px + env(safe-area-inset-bottom));
+    border: 1px solid var(--line); }
+  .sheet-in h3 { margin: 0 0 12px; }
+  .sheet-in .row { display: flex; align-items: center; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid var(--line); font-size: .95rem; }
+  .cmds { margin-top: 14px; color: var(--muted); font-size: .88rem; line-height: 1.8; }
+  .cmds q { color: var(--text); quotes: "„" "“"; }
+
+  @media (max-width: 420px) { .grid { grid-template-columns: 1fr 1fr; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand">
+      <div class="logo">🎛️</div>
+      <div>
+        <h1>OBS Fernbedienung</h1>
+        <div class="pill" id="status"><span class="dot"></span><span id="statusText">Nicht verbunden</span></div>
+      </div>
+    </div>
+    <button class="ghost hidden" id="logoutBtn">Abmelden</button>
+  </header>
+
+  <!-- ===== ANMELDEN ===== -->
+  <div class="login" id="login">
+    <h2>Mit OBS verbinden</h2>
+    <p>Scanne den QR-Code aus OBS oder wähle einen Screenshot davon aus der Galerie.</p>
+    <div class="stack">
+      <div class="err-box" id="errBox"></div>
+      <button class="big" id="scanBtn">📷 QR-Code scannen</button>
+      <video id="video" playsinline muted></video>
+      <button class="big alt hidden" id="stopScan">Abbrechen</button>
+      <button class="big alt" id="photoBtn">🖼️ QR-Bild aus Galerie</button>
+      <input type="file" id="photoInput" accept="image/*" class="hidden">
+    </div>
+
+    <details id="manual">
+      <summary>Von Hand eingeben</summary>
+      <label for="host">Adresse (Tailscale-IP vom Laptop oder jason.tailXXXX.ts.net)</label>
+      <input id="host" value="100.92.246.90" autocapitalize="off" autocorrect="off" spellcheck="false">
+      <label for="port">Port</label>
+      <input id="port" value="4455" inputmode="numeric">
+      <label for="pw">Passwort</label>
+      <input id="pw" type="password" placeholder="Passwort aus OBS">
+      <label class="check"><input type="checkbox" id="useTs"> Tailscale-Adresse behalten, wenn ich QR scanne</label>
+      <div style="margin-top:14px"><button class="big" id="connectBtn">Verbinden</button></div>
+    </details>
+
+    <div class="hint">QR-Code in OBS: <b>Werkzeuge → WebSocket-Servereinstellungen → Verbindungsinformationen anzeigen</b></div>
+  </div>
+
+  <!-- ===== STEUERUNG ===== -->
+  <div id="panel" class="hidden">
+    <div class="outputs">
+      <button class="out live" id="streamBtn"><span class="ico">📡</span><span><b>Stream</b><small>Aus</small></span></button>
+      <button class="out rec" id="recBtn"><span class="ico">⏺</span><span><b>Aufnahme</b><small>Aus</small></span></button>
+    </div>
+
+    <div class="section">
+      <div class="sec-head"><h3>Szenen</h3><span id="sceneCount"></span></div>
+      <div class="grid" id="scenes"></div>
+    </div>
+
+    <div class="section">
+      <div class="sec-head"><h3>Quellen</h3><span id="curName"></span></div>
+      <div class="grid" id="sources"></div>
+    </div>
+
+    <div class="section">
+      <div class="sec-head"><h3>Audio</h3></div>
+      <div class="grid" id="audio"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== SPRACHE (unten) ===== -->
+<div class="voicebar hidden" id="voicebar">
+  <div class="voice">
+    <div class="vtext">
+      <div class="heard" id="voiceHeard">Tippe 🎤 und sag z. B. „Szene Pause“</div>
+      <div class="res" id="voiceResult"></div>
+    </div>
+    <button class="vbtn" id="voiceMenuBtn" aria-label="Spracheinstellungen">⚙️</button>
+    <button class="mic" id="micBtn" aria-label="Sprachbefehl">🎤</button>
+  </div>
+</div>
+
+<div class="sheet hidden" id="voiceSheet">
+  <div class="sheet-in">
+    <h3>Sprachsteuerung</h3>
+    <label class="row">Dauerhaft zuhören <input type="checkbox" id="voiceContinuous"></label>
+    <label class="row">Antwort vorlesen <input type="checkbox" id="voiceSpeak" checked></label>
+    <div class="cmds">
+      <q>Szene Pause</q> · <q>Wechsel zu Spiel</q><br>
+      <q>Kamera aus</q> · <q>Logo einblenden</q><br>
+      <q>Mikrofon stumm</q> · <q>Mikrofon an</q><br>
+      <q>Stream starten</q> · <q>Aufnahme stoppen</q>
+    </div>
+    <div style="margin-top:18px"><button class="big alt" id="sheetClose">Schliessen</button></div>
+  </div>
+</div>
+
+<canvas id="canvas" class="hidden"></canvas>
+
+<script>
+/* =========================================================
+   OBS-VERBINDUNG, QR-CODE, KNÖPFE
+   ========================================================= */
+const $ = id => document.getElementById(id);
+let obs = null;
+let manualLogout = false;
+
+const state = { currentScene: null, scenes: [], sources: [], audio: [], streaming: false, recording: false };
+
+function status(text, cls = "") {
+  $("statusText").textContent = text;
+  $("status").className = "pill " + cls;
+  const box = $("errBox");
+  if (cls === "err") { box.textContent = text; box.classList.add("show"); }
+  else box.classList.remove("show");
+}
+
+/* ---------- Gespeicherte Anmeldung ---------- */
+function loadSaved() { try { return JSON.parse(localStorage.getItem("obsLogin") || "{}"); } catch { return {}; } }
+function saveLogin(d) { try { localStorage.setItem("obsLogin", JSON.stringify(d)); } catch {} }
+const saved = loadSaved();
+if (saved.host) $("host").value = saved.host;
+if (saved.port) $("port").value = saved.port;
+if (saved.pw) $("pw").value = saved.pw;
+$("useTs").checked = saved.useTs ?? true;
+
+/* Läuft die Seite direkt vom Laptop (über START-Laptop.bat / tailscale serve)?
+   Dann braucht es keine IP – Verbindung geht automatisch über /ws */
+const SERVED = /\.ts\.net$/i.test(location.hostname);
+if (SERVED) {
+  $("host").value = location.host;
+  ["host", "port", "useTs"].forEach(id => {
+    const inp = $(id); inp.classList.add("hidden");
+    const lab = document.querySelector(`label[for="${id}"]`) || inp.closest("label");
+    if (lab) lab.classList.add("hidden");
+  });
+  document.querySelector(".login p").textContent = "Nur noch das OBS-Passwort eingeben oder den QR-Code scannen.";
+  $("manual").open = true;
+}
+
+/* ---------- Adresse -> WebSocket-URL ---------- */
+function buildUrl(host, port) {
+  if (/^wss?:\/\//i.test(host)) return host;
+  const h = host.replace(/^\[|\]$/g, "");
+  const isTsName = /\.ts\.net$/i.test(h);
+  const urlHost = h.includes(":") ? `[${h}]` : h;            // IPv6 braucht [ ]
+  if (isTsName) return `wss://${urlHost}`;                   // über "tailscale serve"
+  if (location.protocol === "https:") return `wss://${urlHost}:${port}`;
+  return `ws://${urlHost}:${port}`;
+}
+
+/* ---------- QR auswerten: obsws://IP:PORT/PASSWORT ---------- */
+function handleQr(text) {
+  const m = /^obsws:\/\/(\[[^\]]+\]|[^:/]+|[0-9a-f:]+?):(\d+)(?:\/(.*))?$/i.exec(text.trim());
+  if (!m) { status("Das ist kein OBS-QR-Code.", "err"); return; }
+  let host = m[1].replace(/^\[|\]$/g, "");
+  const port = m[2];
+  let pw = "";
+  try { pw = m[3] ? decodeURIComponent(m[3]) : ""; } catch { pw = m[3] || ""; }
+  const cur = $("host").value.trim();
+  if ($("useTs").checked && (cur.startsWith("100.") || /\.ts\.net$/i.test(cur))) host = cur;
+  $("host").value = host; $("port").value = port; $("pw").value = pw;
+  connect();
+}
+
+/* ---------- Live-Kamera ---------- */
+let camStream = null, scanning = false;
+$("scanBtn").onclick = async () => {
+  try { camStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } }); }
+  catch { status("Kamera geht hier nicht – nimm „QR-Bild aus Galerie“.", "err"); return; }
+  const v = $("video");
+  v.srcObject = camStream; v.style.display = "block"; await v.play();
+  $("scanBtn").classList.add("hidden"); $("stopScan").classList.remove("hidden");
+  status("Halte die Kamera auf den QR-Code …");
+  scanning = true; requestAnimationFrame(tick);
+};
+function stopCamera() {
+  scanning = false;
+  if (camStream) camStream.getTracks().forEach(t => t.stop());
+  camStream = null; $("video").style.display = "none";
+  $("scanBtn").classList.remove("hidden"); $("stopScan").classList.add("hidden");
+}
+$("stopScan").onclick = () => { stopCamera(); status("Nicht verbunden"); };
+
+function decodeFrom(source, w, h) {
+  const c = $("canvas"); c.width = w; c.height = h;
+  const ctx = c.getContext("2d", { willReadFrequently: true });
+  ctx.drawImage(source, 0, 0, w, h);
+  return jsQR(ctx.getImageData(0, 0, w, h).data, w, h);
+}
+function tick() {
+  if (!scanning) return;
+  const v = $("video");
+  if (v.readyState === v.HAVE_ENOUGH_DATA) {
+    const code = decodeFrom(v, v.videoWidth, v.videoHeight);
+    if (code && code.data) { stopCamera(); handleQr(code.data); return; }
+  }
+  requestAnimationFrame(tick);
+}
+
+/* ---------- QR aus Galerie ---------- */
+$("photoBtn").onclick = () => $("photoInput").click();
+$("photoInput").onchange = e => {
+  const file = e.target.files[0]; if (!file) return;
+  const img = new Image();
+  img.onload = () => {
+    const scale = Math.min(1, 1400 / Math.max(img.width, img.height));
+    const code = decodeFrom(img, Math.round(img.width * scale), Math.round(img.height * scale));
+    if (code && code.data) handleQr(code.data);
+    else status("Kein QR-Code im Bild erkannt. Screenshot so zuschneiden, dass der Code gross ist.", "err");
+    URL.revokeObjectURL(img.src);
+  };
+  img.src = URL.createObjectURL(file);
+  e.target.value = "";
+};
+
+/* ---------- Verbinden ---------- */
+$("connectBtn").onclick = () => connect();
+
+async function connect() {
+  const host = $("host").value.trim(), port = $("port").value.trim() || "4455", pw = $("pw").value;
+  if (!host) { $("manual").open = true; status("Bitte Adresse eingeben oder QR-Code scannen.", "err"); return; }
+  manualLogout = false;
+  if (obs) { try { await obs.disconnect(); } catch {} }
+  obs = new OBSWebSocket();
+  setupEvents();
+  status(`Verbinde mit ${host} …`);
+  try {
+    const url = SERVED ? `wss://${location.host}/ws` : buildUrl(host, port);
+    await obs.connect(url, pw || undefined);
+    saveLogin({ host, port, pw, useTs: $("useTs").checked });
+    status(`Verbunden · ${host}`, "ok");
+    $("login").classList.add("hidden");
+    $("panel").classList.remove("hidden");
+    $("voicebar").classList.remove("hidden");
+    $("logoutBtn").classList.remove("hidden");
+    await loadAll();
+  } catch (e) {
+    const msg = String(e.message || e);
+    if (/auth/i.test(msg)) status(pw ? "Falsches Passwort." : "Bitte OBS-Passwort eingeben.", "err");
+    else if (SERVED) status("OBS antwortet nicht. Ist OBS am Laptop offen und der WebSocket-Server aktiviert?", "err");
+    else if (location.protocol === "https:" && !/\.ts\.net$/i.test(host))
+      status("Auf einer https-Seite (GitHub) geht keine IP. Trage den Tailscale-Namen ein (jason.tailXXXX.ts.net).", "err");
+    else status(`OBS nicht erreichbar (${host}:${port}). OBS offen? WebSocket an? Tailscale an beiden Geräten?`, "err");
+    $("manual").open = true;
+  }
+}
+
+$("logoutBtn").onclick = async () => {
+  manualLogout = true;
+  saveLogin({ ...loadSaved(), pw: "" });
+  $("pw").value = "";
+  try { await obs.disconnect(); } catch {}
+};
+
+function showLogin() {
+  $("panel").classList.add("hidden");
+  $("voicebar").classList.add("hidden");
+  $("login").classList.remove("hidden");
+  $("logoutBtn").classList.add("hidden");
+}
+
+/* ---------- Befehle ---------- */
+const actions = {
+  switchScene: name => obs.call("SetCurrentProgramScene", { sceneName: name }),
+  setSource: (id, on) => obs.call("SetSceneItemEnabled", { sceneName: state.currentScene, sceneItemId: id, sceneItemEnabled: on }),
+  setMute: (name, muted) => obs.call("SetInputMute", { inputName: name, inputMuted: muted }),
+  stream: on => obs.call(on ? "StartStream" : "StopStream"),
+  record: on => obs.call(on ? "StartRecord" : "StopRecord")
+};
+
+/* ---------- Laden & Zeichnen ---------- */
+async function loadAll() { await Promise.all([loadScenes(), loadOutputs(), loadAudio()]); }
+
+function el(tag, cls, html) { const e = document.createElement(tag); e.className = cls; if (html) e.innerHTML = html; return e; }
+
+async function loadScenes() {
+  const { scenes, currentProgramSceneName } = await obs.call("GetSceneList");
+  state.currentScene = currentProgramSceneName;
+  state.scenes = [...scenes].reverse().map(s => s.sceneName);
+  $("sceneCount").textContent = state.scenes.length + (state.scenes.length === 1 ? " Szene" : " Szenen");
+  const box = $("scenes"); box.innerHTML = "";
+  state.scenes.forEach(name => {
+    const active = name === state.currentScene;
+    const b = el("button", "scene" + (active ? " on" : ""), "<span></span><small></small>");
+    b.firstChild.textContent = name;
+    b.lastChild.textContent = active ? "Auf Sendung" : "Tippen zum Wechseln";
+    b.onclick = () => actions.switchScene(name);
+    box.appendChild(b);
+  });
+  await loadSources();
+}
+
+function toggleBtn(cls, name, sub, on) {
+  const b = el("button", "tog " + cls + (on ? " on" : ""), '<span class="lbl"><b></b><small></small></span><span class="sw"></span>');
+  b.querySelector("b").textContent = name;
+  b.querySelector("small").textContent = sub;
+  return b;
+}
+
+function renderSources() {
+  $("curName").textContent = state.currentScene || "";
+  const box = $("sources"); box.innerHTML = "";
+  if (!state.sources.length) { box.innerHTML = '<div class="empty">Keine Quellen in dieser Szene.</div>'; return; }
+  state.sources.forEach(s => {
+    const b = toggleBtn("src", s.name, s.enabled ? "Sichtbar" : "Versteckt", s.enabled);
+    b.onclick = () => actions.setSource(s.id, !s.enabled);
+    box.appendChild(b);
+  });
+}
+async function loadSources() {
+  state.sources = [];
+  if (state.currentScene) {
+    const { sceneItems } = await obs.call("GetSceneItemList", { sceneName: state.currentScene });
+    state.sources = [...sceneItems].reverse().map(i => ({ id: i.sceneItemId, name: i.sourceName, enabled: i.sceneItemEnabled }));
+  }
+  renderSources();
+}
+
+function renderAudio() {
+  const box = $("audio"); box.innerHTML = "";
+  if (!state.audio.length) { box.innerHTML = '<div class="empty">Keine Audioquellen gefunden.</div>'; return; }
+  state.audio.forEach(a => {
+    const b = toggleBtn("audio", a.name, a.muted ? "🔇 Stumm" : "🔊 An", !a.muted);
+    b.onclick = () => actions.setMute(a.name, !a.muted);
+    box.appendChild(b);
+  });
+}
+async function loadAudio() {
+  const { inputs } = await obs.call("GetInputList");
+  const list = [];
+  for (const inp of inputs) {
+    try { const { inputMuted } = await obs.call("GetInputMute", { inputName: inp.inputName }); list.push({ name: inp.inputName, muted: inputMuted }); }
+    catch { /* keine Audioquelle */ }
+  }
+  state.audio = list;
+  renderAudio();
+}
+
+function paintOutput(btn, on) {
+  btn.classList.toggle("on", on);
+  btn.querySelector("small").textContent = on ? "Läuft" : "Aus";
+}
+async function loadOutputs() {
+  state.streaming = (await obs.call("GetStreamStatus")).outputActive;
+  state.recording = (await obs.call("GetRecordStatus")).outputActive;
+  paintOutput($("streamBtn"), state.streaming);
+  paintOutput($("recBtn"), state.recording);
+}
+$("streamBtn").onclick = () => {
+  if (state.streaming && !confirm("Stream wirklich beenden?")) return;
+  actions.stream(!state.streaming);
+};
+$("recBtn").onclick = () => actions.record(!state.recording);
+
+/* ---------- Live-Updates ---------- */
+function setupEvents() {
+  obs.on("ConnectionClosed", () => {
+    showLogin();
+    if (manualLogout) { status("Abgemeldet"); return; }
+    status("Verbindung verloren – neuer Versuch in 3 s …", "err");
+    setTimeout(() => { if (!manualLogout && $("panel").classList.contains("hidden")) connect(); }, 3000);
+  });
+  obs.on("CurrentProgramSceneChanged", () => loadScenes());
+  obs.on("SceneListChanged", () => loadScenes());
+  obs.on("SceneNameChanged", () => loadScenes());
+  obs.on("SceneItemListReindexed", () => loadSources());
+  obs.on("SceneItemCreated", () => loadSources());
+  obs.on("SceneItemRemoved", () => loadSources());
+  obs.on("SceneItemEnableStateChanged", e => {
+    if (e.sceneName !== state.currentScene) return;
+    const s = state.sources.find(x => x.id === e.sceneItemId);
+    if (s) { s.enabled = e.sceneItemEnabled; renderSources(); }
+  });
+  obs.on("InputMuteStateChanged", e => {
+    const a = state.audio.find(x => x.name === e.inputName);
+    if (a) { a.muted = e.inputMuted; renderAudio(); }
+  });
+  obs.on("InputCreated", () => loadAudio());
+  obs.on("InputRemoved", () => loadAudio());
+  obs.on("InputNameChanged", () => { loadAudio(); loadSources(); });
+  obs.on("StreamStateChanged", e => { state.streaming = e.outputActive; paintOutput($("streamBtn"), e.outputActive); });
+  obs.on("RecordStateChanged", e => { state.recording = e.outputActive; paintOutput($("recBtn"), e.outputActive); });
+}
+
+if (SERVED || (saved.host && saved.pw)) connect();
+
+/* =========================================================
+   SPRACHSTEUERUNG
+   ========================================================= */
+(() => {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const micBtn = $("micBtn"), heard = $("voiceHeard"), result = $("voiceResult");
+
+  $("voiceMenuBtn").onclick = () => $("voiceSheet").classList.remove("hidden");
+  $("sheetClose").onclick = () => $("voiceSheet").classList.add("hidden");
+  $("voiceSheet").onclick = e => { if (e.target.id === "voiceSheet") $("voiceSheet").classList.add("hidden"); };
+
+  try {
+    const v = JSON.parse(localStorage.getItem("obsVoice") || "{}");
+    if (v.continuous !== undefined) $("voiceContinuous").checked = v.continuous;
+    if (v.speak !== undefined) $("voiceSpeak").checked = v.speak;
+  } catch {}
+  const saveOpts = () => { try { localStorage.setItem("obsVoice", JSON.stringify({
+    continuous: $("voiceContinuous").checked, speak: $("voiceSpeak").checked })); } catch {} };
+  $("voiceContinuous").onchange = saveOpts; $("voiceSpeak").onchange = saveOpts;
+
+  if (!SR) {
+    micBtn.disabled = true;
+    heard.textContent = "Sprache geht in diesem Browser nicht (Chrome nehmen).";
+    return;
+  }
+
+  const NUM = { null: "0", eins: "1", zwei: "2", drei: "3", vier: "4", fuenf: "5", sechs: "6", sieben: "7", acht: "8", neun: "9", zehn: "10" };
+  const norm = s => s.toLowerCase().replace(/ä/g, "ae").replace(/ö/g, "oe").replace(/ü/g, "ue").replace(/ß/g, "ss")
+    .replace(/[^a-z0-9 ]+/g, " ").replace(/\s+/g, " ").trim();
+  const words = s => norm(s).split(" ").filter(Boolean);
+  const numify = list => list.map(w => NUM[w] || w);
+
+  const ON   = ["an","ein","einblenden","einschalten","zeigen","zeige","anzeigen","sichtbar","aktivieren","start","starten","starte","los","beginnen","laut","unmute"];
+  const OFF  = ["aus","ausblenden","ausschalten","verstecken","verstecke","weg","deaktivieren","stop","stopp","stoppe","stoppen","beenden","beende","ende"];
+  const MUTE = ["stumm","stummschalten","mute","muten","leise"];
+  const FILL = ["szene","wechsel","wechsle","wechseln","zu","zur","zum","auf","die","der","das","den","bitte","mach","mache","schalte","schalt","quelle","audio","ton","und"];
+
+  function scoreName(name, textWords) {
+    const n = numify(words(name)); if (!n.length) return 0;
+    const t = numify(textWords);
+    if ((" " + t.join(" ") + " ").includes(" " + n.join(" ") + " ")) return 100 + n.join(" ").length;
+    let hit = 0;
+    for (const w of n) if (t.some(x => x === w || (w.length > 3 && x.length > 3 && (x.startsWith(w.slice(0, 4)) || w.startsWith(x.slice(0, 4)))))) hit++;
+    const r = hit / n.length;
+    return r >= .5 ? Math.round(r * 60) : 0;
+  }
+
+  function findTarget(tw) {
+    const c = [];
+    state.scenes.forEach(n => c.push({ type: "scene", name: n }));
+    state.sources.forEach(s => c.push({ type: "source", name: s.name, ref: s }));
+    state.audio.forEach(a => c.push({ type: "audio", name: a.name, ref: a }));
+    const useful = tw.filter(w => ![...FILL, ...ON, ...OFF, ...MUTE].includes(w));
+    let best = null;
+    for (const x of c) { x.score = Math.max(scoreName(x.name, tw), scoreName(x.name, useful)); if (x.score && (!best || x.score > best.score)) best = x; }
+    if (!best) return null;
+    const ties = c.filter(x => x.score === best.score);
+    if (ties.length > 1) {
+      const has = l => tw.some(w => l.includes(w));
+      const prefer = tw.includes("szene") || tw.some(w => w.startsWith("wechs")) ? "scene" : has(MUTE) ? "audio" : (has(ON) || has(OFF)) ? "source" : "scene";
+      best = ties.find(x => x.type === prefer) || best;
+    }
+    return best;
+  }
+
+  async function run(text) {
+    const w = words(text);
+    const has = l => w.some(x => l.includes(x));
+    const on = has(ON), off = has(OFF), mute = has(MUTE);
+    const target = findTarget(w);
+    const strong = target && target.score >= 100;
+    const isStream = w.some(x => ["stream","streamen","livestream","live"].includes(x));
+    const isRec = w.some(x => x.startsWith("aufnahme") || x.startsWith("aufnehm") || x === "record");
+    if (!strong && (isStream || isRec)) {
+      const label = isStream ? "Stream" : "Aufnahme";
+      const cur = isStream ? state.streaming : state.recording;
+      const want = off ? false : on ? true : !cur;
+      if (want === cur) return say(`${label} ${cur ? "läuft schon" : "ist schon aus"}`);
+      await actions[isStream ? "stream" : "record"](want);
+      return say(`${label} ${want ? "gestartet" : "gestoppt"}`);
+    }
+    if (!target) return null;
+    if (target.type === "scene") { await actions.switchScene(target.name); return say(`Szene ${target.name}`); }
+    if (target.type === "source") {
+      const want = off ? false : on ? true : !target.ref.enabled;
+      await actions.setSource(target.ref.id, want); return say(`${target.name} ${want ? "an" : "aus"}`);
+    }
+    if (target.type === "audio") {
+      const m = mute || off ? true : on ? false : !target.ref.muted;
+      await actions.setMute(target.name, m); return say(`${target.name} ${m ? "stumm" : "an"}`);
+    }
+    return null;
+  }
+
+  function say(msg) {
+    result.textContent = "✅ " + msg;
+    if ($("voiceSpeak").checked && "speechSynthesis" in window) {
+      speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance(msg); u.lang = "de-DE"; u.rate = 1.1; speechSynthesis.speak(u);
+    }
+    return msg;
+  }
+
+  const rec = new SR();
+  rec.lang = "de-DE"; rec.interimResults = true; rec.maxAlternatives = 3;
+  let listening = false, wanted = false;
+
+  rec.onstart = () => { listening = true; micBtn.classList.add("listening"); heard.textContent = "Ich höre zu …"; };
+  rec.onend = () => {
+    listening = false; micBtn.classList.remove("listening");
+    if (wanted && $("voiceContinuous").checked) setTimeout(() => { try { rec.start(); } catch {} }, 300);
+    else wanted = false;
+  };
+  rec.onerror = e => {
+    if (e.error === "no-speech" || e.error === "aborted") return;
+    wanted = false;
+    if (e.error === "not-allowed" || e.error === "service-not-allowed")
+      heard.textContent = "❌ Mikrofon nicht erlaubt (Seite muss über https/GitHub laufen).";
+    else if (e.error === "network") heard.textContent = "❌ Spracherkennung braucht Internet.";
+    else heard.textContent = "❌ Fehler: " + e.error;
+  };
+  rec.onresult = async e => {
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      const r = e.results[i];
+      heard.textContent = "„" + r[0].transcript.trim() + "“";
+      if (!r.isFinal) continue;
+      if (!obs || !obs.identified) { result.textContent = "❌ Nicht mit OBS verbunden"; continue; }
+      let done = null;
+      for (let a = 0; a < r.length && !done; a++) {
+        try { done = await run(r[a].transcript); } catch (err) { result.textContent = "❌ OBS: " + (err.message || err); done = "err"; }
+      }
+      if (!done) result.textContent = "🤷 Nicht verstanden – sag z. B. „Szene " + (state.scenes[0] || "Pause") + "“";
+    }
+  };
+
+  micBtn.onclick = () => {
+    if (listening || wanted) { wanted = false; try { rec.stop(); } catch {} return; }
+    wanted = true; rec.continuous = $("voiceContinuous").checked; result.textContent = "";
+    try { rec.start(); } catch {}
+  };
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,22 @@
+OBS FERNBEDIENUNG - SO GEHTS
+============================
+
+AM LAPTOP (einmalig):
+1. Diesen ganzen Ordner auf den Laptop kopieren (z. B. auf den Desktop).
+2. Rechtsklick auf START-Laptop.bat -> "Als Administrator ausfuehren".
+3. Kommt ein Link "Serve is not enabled": Link oeffnen, Enable klicken,
+   dann START-Laptop.bat nochmal starten.
+4. Am Ende steht eine Adresse wie:
+      https://jason.tailXXXX.ts.net/
+   Diese abschreiben.
+
+AM HANDY:
+1. Tailscale einschalten.
+2. Die https-Adresse in Chrome oeffnen.
+3. OBS-Passwort eingeben (oder QR-Bild aus Galerie) -> fertig.
+4. Tipp: Chrome-Menue -> "Zum Startbildschirm hinzufuegen".
+
+Das Mikrofon (Sprachsteuerung) funktioniert so auch.
+OBS muss am Laptop offen sein.
+
+AUSSCHALTEN: In cmd eingeben:  tailscale serve reset
